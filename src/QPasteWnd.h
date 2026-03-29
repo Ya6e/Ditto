@@ -20,6 +20,7 @@
 #include "SymbolEdit.h"
 #include "Popup.h"
 #include "CustomFriendsHelper.h"
+#include "ModernScrollBar.h"
 
 class CMainTable
 {
@@ -165,6 +166,8 @@ public:
 	CAccels m_toolTipActions;
 	CAccels m_modifierKeyActions;
 	bool m_showScrollBars;
+	CModernScrollBar m_modernScrollBar;       // Vertical scrollbar
+	CModernScrollBar m_modernScrollBarHorz;   // Horizontal scrollbar
 	int m_leftSelectedCompareId;
 	INT64 m_extraDataCounter;
 	CPopup m_popupMsg;
@@ -269,6 +272,7 @@ public:
 	bool DoExportToTextFile();
 	bool DoExportToGoogleTranslate();
 	bool DoExportToWebSearch();
+	bool DoActionGenerateGuid();
 	bool DoExportToBitMapFile();
 	bool DoSaveCurrentClipboard();
 	bool DoMoveClipDown();
@@ -303,12 +307,18 @@ public:
 	bool DoActionPasteDontMoveClip();
 	bool DoSetDragFileName();
 	bool DoActionPasteTrimWhiteSpace();
+	bool DoActionPastePosixifyPaths();
 	bool DoActionToggleTransparency();
 	bool DoActionIncreaseTransparency();
 	bool DoActionDecreaseTransparency();
 	bool DoActionEmailTo();
 	bool DoActionGmail();
 	bool DoActionEmailToAttachExport();
+	
+	// Refresh scrollbar colors from current theme
+	void RefreshScrollBarColors();
+	// Refresh all theme colors (caption, scrollbars, etc.)
+	void RefreshThemeColors();
 	bool DoActionEmailToAttachContent();
 	bool DoActionSlugify();
 	bool DoCopySelection();
@@ -463,6 +473,7 @@ protected:
 	afx_msg void OnChaiScriptPaste(UINT idIn);
     afx_msg LRESULT OnSelectAll(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnShowHideScrollBar(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnUpdateScrollBar(WPARAM wParam, LPARAM lParam);
 	afx_msg void OnMenuSearchDescription();
 	afx_msg void OnMenuSearchFullText();
 	afx_msg void OnMenuSearchQuickPaste();
@@ -558,7 +569,9 @@ public:
 	afx_msg void OnUpdateOnSpecialPasteDontUpdateOrder(CCmdUI *pCmdUI);
 
 	afx_msg void OnSpecialpasteTrim();
+	afx_msg void OnSpecialpastePosixifyPaths();
 	afx_msg void OnUpdateSpecialpasteTrim(CCmdUI *pCmdUI);
+	afx_msg void OnUpdateSpecialPosixifyPaths(CCmdUI* pCmdUI);
 	afx_msg void OnTransparencyIncrease();
 	afx_msg void OnUpdateTransparencyIncrease(CCmdUI *pCmdUI);
 	afx_msg void OnTransparencyDecrease();
@@ -604,4 +617,6 @@ public:
 	afx_msg void OnUpdateSpecialpasteAsciitextonly(CCmdUI* pCmdUI);
 	afx_msg void OnImportExporttowebsearch();
 	afx_msg void OnUpdateImportExporttowebsearch(CCmdUI* pCmdUI);
+	afx_msg void OnSpecialpastePastenewguid();
+	afx_msg void OnUpdateSpecialpastePastenewguid(CCmdUI* pCmdUI);
 };

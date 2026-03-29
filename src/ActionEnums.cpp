@@ -314,6 +314,9 @@ CString ActionEnums::EnumDescription(ActionEnumValues value)
 	case PASTE_TRIM_WHITE_SPACE:
 		val = "Paste, Trim White Space";
 		break;
+	case PASTE_POSIXIFY_PATHS:
+		val = "Paste, Posixify Paths";
+		break;
 	case TRANSPARENCY_NONE:
 		val = "Set Transparency None";
 		break;
@@ -427,6 +430,9 @@ CString ActionEnums::EnumDescription(ActionEnumValues value)
 		break;
 	case EXPORT_TO_WEB_SEARCH:
 		val = "Export To Web Search";
+		break;
+	case GENERATE_GUID:
+		val = "Generate GUID";
 		break;
 	}
 

@@ -247,7 +247,6 @@ UINT CProcessPaste::MarkAsPastedThread(LPVOID pParam)
 			for (int i = 0; i < clipCount; i++)
 			{
 				int id = pData->ids.ElementAt(i);
-
 				theApp.RefreshClipInUI(id, refreshFlags);
 			}			
 

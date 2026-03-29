@@ -26,10 +26,12 @@ public:
 	CString m_pasteScriptGuid;
 	bool m_updateClipOrder;
 	bool m_trimWhiteSpace;
+	bool m_PosixifyPaths;
 	bool m_pasteSlugify;
 	bool m_invertCase;
 	bool m_placeCF_HDROP_OnDrag;
 	bool m_pasteAsciiOnly;
+	bool m_pasteGuid;
 
 	bool LimitFormatsToText() 
 	{ 
@@ -44,6 +46,7 @@ public:
 			m_pasteTypoglycemia ||
 			m_pasteAddingDateTime || 
 			m_trimWhiteSpace ||
+			m_PosixifyPaths ||
 			m_pasteSlugify || 
 			m_invertCase ||
 			m_pasteCamelCase ||
