@@ -39,6 +39,7 @@ protected:
 	void AddLineFeeds(CClip &clip, int count);
 	void Typoglycemia(CClip &clip);
 	HGLOBAL ConvertToFileDrop();
+	HGLOBAL ConvertImagesToFileDrop();
 	void AddDateTime(CClip &clip);
 	void SaveDittoFileDataToFile(CClip &clip);
 	void TrimWhiteSpace(CClip &clip);

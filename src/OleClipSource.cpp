@@ -130,13 +130,24 @@ BOOL COleClipSource::DoImmediateRender()
 
 			if (m_pasteOptions.LimitFormatsToText() == false)
 			{
-				CCF_HDropAggregator HDrop;
-				if (m_ClipIDs.AggregateData(HDrop, CF_HDROP, CGetSetOptions::m_bMultiPasteReverse, m_pasteOptions.LimitFormatsToText()))
+				HGLOBAL hImageFileDrop = ConvertImagesToFileDrop();
+				if (hImageFileDrop != NULL)
 				{
-					CClipFormat cf(CF_HDROP, HDrop.GetHGlobal());
+					CClipFormat cf(CF_HDROP, hImageFileDrop);
 					clip.m_Formats.Add(cf);
 					//clip.m_Formats now owns the global data
 					cf.m_autoDeleteData = false;
+				}
+				else
+				{
+					CCF_HDropAggregator HDrop;
+					if (m_ClipIDs.AggregateData(HDrop, CF_HDROP, CGetSetOptions::m_bMultiPasteReverse, m_pasteOptions.LimitFormatsToText()))
+					{
+						CClipFormat cf(CF_HDROP, HDrop.GetHGlobal());
+						clip.m_Formats.Add(cf);
+						//clip.m_Formats now owns the global data
+						cf.m_autoDeleteData = false;
+					}
 				}
 
 				CRichTextAggregator RichText(SepA);
@@ -1536,6 +1547,140 @@ HGLOBAL COleClipSource::ConvertToFileDrop()
 	HGLOBAL hData = fileList.CreateCF_HDROPBuffer();
 
 	return hData;
+}
+
+HGLOBAL COleClipSource::ConvertImagesToFileDrop()
+{
+	INT_PTR numIDs = m_ClipIDs.GetCount();
+	if (numIDs <= 1)
+	{
+		return NULL;
+	}
+
+	struct ClipKind
+	{
+		bool hasHDrop = false;
+		bool hasText = false;
+		bool hasImage = false;
+	};
+
+	std::vector<ClipKind> kinds(numIDs);
+	int imageClipCount = 0;
+	int hDropClipCount = 0;
+
+	for (INT_PTR i = 0; i < numIDs; i++)
+	{
+		CClipTypes types;
+		CClip::LoadTypes(m_ClipIDs[i], types);
+
+		ClipKind kind;
+		for (INT_PTR t = 0; t < types.GetSize(); t++)
+		{
+			CLIPFORMAT cf = types[t];
+			if (cf == CF_HDROP)
+			{
+				kind.hasHDrop = true;
+			}
+			else if (cf == CF_UNICODETEXT || cf == CF_TEXT)
+			{
+				kind.hasText = true;
+			}
+			else if (cf == CF_DIB || cf == theApp.m_PNG_Format)
+			{
+				kind.hasImage = true;
+			}
+		}
+
+		kinds[i] = kind;
+
+		if (kind.hasHDrop)
+		{
+			hDropClipCount++;
+		}
+		else if (!kind.hasText && kind.hasImage)
+		{
+			imageClipCount++;
+		}
+	}
+
+	// Only convert when there is at least one raw image clip and multiple image/file clips in total
+	if (imageClipCount == 0 || (imageClipCount + hDropClipCount) <= 1)
+	{
+		return NULL;
+	}
+
+	CString path = CGetSetOptions::GetPath(PATH_DRAG_FILES);
+	CreateDirectory(path, NULL);
+
+	CFileRecieve fileList;
+	int fileCount = 0;
+
+	int dragId = CGetSetOptions::GetDragId();
+	int origDragId = dragId;
+
+	CString customDragName = CGetSetOptions::GetTempDragFileName();
+	if (!customDragName.IsEmpty())
+	{
+		dragId = 1;
+	}
+
+	for (INT_PTR i = 0; i < numIDs; i++)
+	{
+		INT_PTR nIndex = CGetSetOptions::m_bMultiPasteReverse ? (numIDs - i - 1) : i;
+		const ClipKind& kind = kinds[nIndex];
+
+		if (kind.hasHDrop)
+		{
+			HGLOBAL hDropData = CClip::LoadFormat(m_ClipIDs[nIndex], CF_HDROP);
+			if (hDropData != NULL)
+			{
+				HDROP drop = (HDROP)GlobalLock(hDropData);
+				if (drop != NULL)
+				{
+					UINT nNumFiles = DragQueryFile(drop, 0xFFFFFFFF, NULL, 0);
+					TCHAR szFile[MAX_PATH];
+					for (UINT nFile = 0; nFile < nNumFiles; nFile++)
+					{
+						if (DragQueryFile(drop, nFile, szFile, _countof(szFile)) > 0)
+						{
+							fileList.AddFile(szFile);
+							fileCount++;
+						}
+					}
+					GlobalUnlock(hDropData);
+				}
+				GlobalFree(hDropData);
+			}
+		}
+		else if (!kind.hasText && kind.hasImage)
+		{
+			CClip fileClip;
+			fileClip.LoadFormats(m_ClipIDs[nIndex]);
+
+			CString name = customDragName.IsEmpty() ? CString(_T("image")) : customDragName;
+			CString file;
+			file.Format(_T("%s%s_%d.png"), path, name, dragId++);
+
+			if (fileClip.WriteImageToFile(file))
+			{
+				fileList.AddFile(file);
+				fileCount++;
+			}
+		}
+	}
+
+	if (customDragName.IsEmpty() &&
+		dragId != origDragId)
+	{
+		CGetSetOptions::SetDragId(dragId);
+	}
+
+	if (fileCount == 0)
+	{
+		return NULL;
+	}
+
+	return fileList.CreateCF_HDROPBuffer();
 }
 
 void COleClipSource::Slugify(CClip &clip)
