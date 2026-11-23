@@ -2,7 +2,7 @@
 #include "CP_Main.h"
 #include "ProcessPaste.h"
 #include "ClipIds.h"
-#include <algorithm>
+#include <utility>
 #include <vector>
 
 #ifdef _DEBUG
@@ -31,8 +31,9 @@ BOOL CProcessPaste::DoPaste()
 	try
 	{
 		// When multi-pasting a mix of text and image/file clips, a single Ctrl+V
-		// causes most apps (Telegram, WeChat, etc.) to consume only one format.
-		// Split consecutive runs of text vs image/file clips and paste sequentially.
+		// causes most apps (Telegram, WeChat, Discord, etc.) to consume only one format.
+		// Always paste text first into the active input box, then paste images/files second
+		// (pasting images first opens modals in apps like Telegram that eat subsequent Ctrl+V).
 		if (m_bSendPaste &&
 			m_pasteOptions.m_pPasteFormats == NULL &&
 			!m_pasteOptions.LimitFormatsToText() &&
@@ -43,10 +44,8 @@ BOOL CProcessPaste::DoPaste()
 			CClipIDs& allIDs = GetClipIDs();
 			INT_PTR totalCount = allIDs.GetSize();
 
-			std::vector<std::vector<int>> batches;
-			bool hasMediaBatch = false;
-			bool hasTextBatch = false;
-			bool prevIsMedia = false;
+			std::vector<int> textIDs;
+			std::vector<int> mediaIDs;
 
 			for (INT_PTR i = 0; i < totalCount; i++)
 			{
@@ -76,29 +75,21 @@ BOOL CProcessPaste::DoPaste()
 				bool isMedia = hasHDrop || (!hasText && hasImage);
 				if (isMedia)
 				{
-					hasMediaBatch = true;
+					mediaIDs.push_back(allIDs[i]);
 				}
 				else
 				{
-					hasTextBatch = true;
+					textIDs.push_back(allIDs[i]);
 				}
-
-				if (batches.empty() || isMedia != prevIsMedia)
-				{
-					batches.emplace_back();
-					prevIsMedia = isMedia;
-				}
-				batches.back().push_back(allIDs[i]);
 			}
 
-			if (hasMediaBatch && hasTextBatch && batches.size() > 1)
+			if (!textIDs.empty() && !mediaIDs.empty())
 			{
-				if (CGetSetOptions::m_bMultiPasteReverse)
-				{
-					std::reverse(batches.begin(), batches.end());
-				}
-
 				MarkAsPasted(m_pasteOptions.m_updateClipOrder);
+
+				std::vector<std::vector<int>> batches;
+				batches.push_back(std::move(textIDs));
+				batches.push_back(std::move(mediaIDs));
 
 				bool anyPasted = false;
 				for (size_t b = 0; b < batches.size(); b++)
@@ -118,7 +109,14 @@ BOOL CProcessPaste::DoPaste()
 
 					pBatchOle->CacheGlobalData(theApp.m_cfIgnoreClipboard, NewGlobalP("Ignore", sizeof("Ignore")));
 					pBatchOle->SetClipboard(); // OLE clipboard owns pBatchOle now
+					COleDataSource::FlushClipboard();
 					theApp.PumpMessageEx();
+
+					if (anyPasted)
+					{
+						Sleep(50);
+						theApp.PumpMessageEx();
+					}
 
 					Log(StrF(_T("Sending sequential paste batch %d of %d to active window"), (int)(b + 1), (int)batches.size()));
 					theApp.m_activeWnd.SendPaste(!anyPasted && m_bActivateTarget);
@@ -126,7 +124,7 @@ BOOL CProcessPaste::DoPaste()
 
 					if (b + 1 < batches.size())
 					{
-						for (int step = 0; step < 10; step++)
+						for (int step = 0; step < 14; step++)
 						{
 							Sleep(25);
 							theApp.PumpMessageEx();
