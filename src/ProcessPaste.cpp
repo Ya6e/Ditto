@@ -2,6 +2,8 @@
 #include "CP_Main.h"
 #include "ProcessPaste.h"
 #include "ClipIds.h"
+#include <algorithm>
+#include <vector>
 
 #ifdef _DEBUG
 #undef THIS_FILE
@@ -28,6 +30,116 @@ BOOL CProcessPaste::DoPaste()
 
 	try
 	{
+		// When multi-pasting a mix of text and image/file clips, a single Ctrl+V
+		// causes most apps (Telegram, WeChat, etc.) to consume only one format.
+		// Split consecutive runs of text vs image/file clips and paste sequentially.
+		if (m_bSendPaste &&
+			m_pasteOptions.m_pPasteFormats == NULL &&
+			!m_pasteOptions.LimitFormatsToText() &&
+			!m_pasteOptions.m_pasteImagesHorizontal &&
+			!m_pasteOptions.m_pasteImagesVertically &&
+			GetClipIDs().GetSize() > 1)
+		{
+			CClipIDs& allIDs = GetClipIDs();
+			INT_PTR totalCount = allIDs.GetSize();
+
+			std::vector<std::vector<int>> batches;
+			bool hasMediaBatch = false;
+			bool hasTextBatch = false;
+			bool prevIsMedia = false;
+
+			for (INT_PTR i = 0; i < totalCount; i++)
+			{
+				CClipTypes types;
+				CClip::LoadTypes(allIDs[i], types);
+
+				bool hasHDrop = false;
+				bool hasText = false;
+				bool hasImage = false;
+				for (INT_PTR t = 0; t < types.GetSize(); t++)
+				{
+					CLIPFORMAT cf = types[t];
+					if (cf == CF_HDROP)
+					{
+						hasHDrop = true;
+					}
+					else if (cf == CF_UNICODETEXT || cf == CF_TEXT)
+					{
+						hasText = true;
+					}
+					else if (cf == CF_DIB || cf == theApp.m_PNG_Format)
+					{
+						hasImage = true;
+					}
+				}
+
+				bool isMedia = hasHDrop || (!hasText && hasImage);
+				if (isMedia)
+				{
+					hasMediaBatch = true;
+				}
+				else
+				{
+					hasTextBatch = true;
+				}
+
+				if (batches.empty() || isMedia != prevIsMedia)
+				{
+					batches.emplace_back();
+					prevIsMedia = isMedia;
+				}
+				batches.back().push_back(allIDs[i]);
+			}
+
+			if (hasMediaBatch && hasTextBatch && batches.size() > 1)
+			{
+				if (CGetSetOptions::m_bMultiPasteReverse)
+				{
+					std::reverse(batches.begin(), batches.end());
+				}
+
+				MarkAsPasted(m_pasteOptions.m_updateClipOrder);
+
+				bool anyPasted = false;
+				for (size_t b = 0; b < batches.size(); b++)
+				{
+					COleClipSource* pBatchOle = new COleClipSource();
+					pBatchOle->m_pasteOptions = m_pasteOptions;
+					for (size_t k = 0; k < batches[b].size(); k++)
+					{
+						pBatchOle->m_ClipIDs.Add(batches[b][k]);
+					}
+
+					if (!pBatchOle->DoImmediateRender())
+					{
+						delete pBatchOle;
+						continue;
+					}
+
+					pBatchOle->CacheGlobalData(theApp.m_cfIgnoreClipboard, NewGlobalP("Ignore", sizeof("Ignore")));
+					pBatchOle->SetClipboard(); // OLE clipboard owns pBatchOle now
+					theApp.PumpMessageEx();
+
+					Log(StrF(_T("Sending sequential paste batch %d of %d to active window"), (int)(b + 1), (int)batches.size()));
+					theApp.m_activeWnd.SendPaste(!anyPasted && m_bActivateTarget);
+					anyPasted = true;
+
+					if (b + 1 < batches.size())
+					{
+						for (int step = 0; step < 10; step++)
+						{
+							Sleep(25);
+							theApp.PumpMessageEx();
+						}
+					}
+				}
+
+				delete m_pOle;
+				m_pOle = NULL;
+				return anyPasted ? TRUE : FALSE;
+			}
+		}
+
 		m_pOle->m_pasteOptions = m_pasteOptions;
 		if (!m_pOle->DoImmediateRender())
 		{
